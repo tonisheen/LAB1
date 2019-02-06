@@ -1,3 +1,92 @@
+// const pickRandom = (arr) => { return arr[Math.floor(Math.random() * arr.length)]; };
+
+// const randomCell = (num_rows, num_cols) => { return new Cell(Math.floor(Math.random() * num_rows), Math.floor(Math.random() * num_cols)); };
+
+// const inGrid = (cell) => { return cell.row > -1 && cell.column > -1; };
+
+/** 
+//   const validate = function (isValid, msg, callback = () => { return true; }, args = [], thisArg = this) {
+//     if (isValid) {
+//         return callback.call(thisArg, ...args, true);
+//     } else {
+//         const err = new Error(msg);
+//         throw err;
+//     }
+// };
+*/
+
+const LongestSequences = function (arr, min_length, equals = (a, b) => { return a == b; }) {
+    const sequences = [];
+    let [pin, scout] = [0, 1];
+
+    while (scout <= arr.length) {
+
+        const match = equals(arr[pin], arr[scout]);
+        const edge = (scout == arr.length - 1);
+        const end = match ? scout + 1 : scout;
+        const longEnough = ((end - pin) >= min_length);
+
+        if (!match || edge) {
+
+            if (longEnough)
+                sequences.push(arr.slice(pin, end));
+
+            pin = scout;
+        }
+
+        scout++;
+    }
+    return sequences;
+};
+
+/**
+// class EventTarget {
+//     constructor() {
+//         this.listeners = {};
+//     }
+
+//     addEventListener(type, callback) {
+//         if (!(type in this.listeners)) {
+//             this.listeners[type] = [];
+//         }
+//         this.listeners[type].push(callback);
+//     }
+
+//     removeEventListener(type, callback) {
+//         if (!(type in this.listeners)) {
+//             return;
+//         }
+//         var stack = this.listeners[type];
+//         for (var i = 0, l = stack.length; i < l; i++) {
+//             if (stack[i] === callback) {
+//                 stack.splice(i, 1);
+//                 return;
+//             }
+//         }
+//     }
+
+//     dispatchEvent(event) {
+//         if (!(event.type in this.listeners)) {
+//             return true;
+//         }
+//         var stack = this.listeners[event.type].slice();
+
+//         for (var i = 0, l = stack.length; i < l; i++) {
+//             stack[i].call(this, event);
+//         }
+//         return !event.defaultPrevented;
+//     }
+// }
+
+// class CustomEvent {
+//     constructor(type, detail = {}) {
+//         this.type = type;
+//         this.detail = detail;
+//         this.defaultPrevented = false;
+//     }
+// }
+*/
+
 class Cell {
     constructor(row_num, col_num) {
         this.row_num = row_num;
@@ -19,7 +108,12 @@ class Cell {
     toArray() {
         return [this.row, this.column];
     }
+
+    neighbor(row_diff, col_diff) {
+        return new Cell(this.row + row_diff, this.column + col_diff);
+    }
 }
+
 class Grid {
     constructor(num_rows, num_columns, val = null) {
         Grid.validateRowCol(num_rows, num_columns);
@@ -37,7 +131,9 @@ class Grid {
     }
 
     isValidCell(cell) {
-        return Grid.flatIndex(this.columns, cell) >= 0 && Grid.flatIndex(this.columns, cell) < this.size;
+        return Number.isInteger(cell.row) && Number.isInteger(cell.column) &&
+            cell.row >= 0 && cell.column >= 0 &&
+            cell.row < this.rows && cell.column < this.columns;
     }
 
     isEmptyCell(cell) {
@@ -53,14 +149,14 @@ class Grid {
         }
     }
 
-    static validateRowCol(num_rows, num_columns) {
+    static validateRowCol(num_rows, num_columns, type = 'Grid', callback = () => { return true; }, args = [], thisArg = this) {
         const isValid = num_rows > 0 && num_columns > 0 && Number.isInteger(num_rows) && Number.isInteger(num_columns);
-        const error_msg = `Cannot initialize ${num_rows} by ${num_columns} Grid`;
+        const error_msg = `Cannot initialize ${num_rows} by ${num_columns} ${type}`;
 
-        return Grid.validate(isValid, error_msg);
+        return Grid.validate(isValid, error_msg, callback, args, thisArg);
     }
 
-    validateCell(cell, callback, args = []) {
+    validateCell(cell, callback = () => { return true; }, args = []) {
         const isValid = this.isValidCell(cell);
         const error_msg = `${cell.toString()} isn't valid cell in ${this.dimension} Grid`;
         const argv = [cell, ...args];
@@ -80,6 +176,12 @@ class Grid {
         return Grid.matrixIndex(this.columns, this.slots.findIndex(rule));
     }
 
+    findAll(rule = () => { return true; }) {
+        return this.slots.map(rule)
+            .map((val, ind) => { return val ? Grid.matrixIndex(this.columns, ind) : Null; })
+            .filter(val => !!val);
+    }
+
     getCell(cell, validated = false) {
         return validated ?
             this.slots[Grid.flatIndex(this.columns, cell)] :
@@ -91,7 +193,6 @@ class Grid {
             (this.slots[Grid.flatIndex(this.columns, cell)] = obj) && this.getCell(cell) :
             this.validateCell(cell, this.fillCell, [obj]);
     }
-
 
     getRow(row_num, validated = false) {
         return validated ?
@@ -107,6 +208,39 @@ class Grid {
 
     getMany(fn, num) {
         return [...new Array(num).fill('*')].map((_, ind) => { return fn.call(this, ind); });
+    }
+
+    windowSearch(width, height, searchFn, validated = false) {
+        if (validated) {
+            let res = [];
+
+            let max_horizontal = this.columns - width;
+            let max_vertical = this.rows - height;
+
+            this.findAll()
+                // .filter(cell => { return this.isValidCell(cell.neighbor(height, width)); })
+                .filter(cell => { return cell.row <= max_vertical && cell.column <= max_horizontal })
+                .forEach(anchor => {
+                    let search_window = new Grid(height, width);
+
+                    search_window.findAll().forEach(cell => {
+                        const source = new Cell(anchor.row + cell.row, anchor.column + cell.column);
+                        search_window.fillCell(cell, this.getCell(source));
+                    });
+
+                    // console.table(search_window.allRows.map(row => {
+                    //     return row.map(candy => candy.color);
+                    // }));
+                    res.push(searchFn(search_window));
+
+                })
+
+            // console.log(res.length)
+
+            return res;
+        }
+
+        return Grid.validateRowCol(width, height, 'window', this.windowSearch, [width, height, searchFn], this);
     }
 
     get allRows() {
@@ -173,27 +307,19 @@ class Grid {
     }
 }
 
-class CustomEvent {
-    constructor(name, detail) {
-        this.name = name;
-        this.details = detail.detail;
-    }
-
-    static dispatchEvent(e) {
-        console.log(`${e.name} event dispatched ${e.details}`);
-    }
-}
-
 class Candy {
     constructor(id, color) {
+
         Object.defineProperty(this, 'id', {
             value: id,
             writable: false,
         });
+
         Object.defineProperty(this, 'color', {
             value: color,
             writable: false,
         });
+
         this.row = null;
         this.column = null;
     }
@@ -228,6 +354,12 @@ class Candy {
         candyClone.position = this.position;
         return candyClone;
     }
+
+    static sameColor(...candies) {
+        return candies.every((candy, _, arr) => {
+            return candy ? candy.color === arr[0].color : false ;
+        })  
+    }
 }
 
 class Board extends Grid {
@@ -236,14 +368,26 @@ class Board extends Grid {
         this.candies = 0;
         this.colors = ["red", "yellow", "green", "orange", "blue", "purple"];
         this.score = 0;
+        this.event_target = new EventTarget();
     }
 
     isValidLocation(row, col) {
         return super.isValidCell(new Cell(row, col));
     }
 
-    isEmptyLocation(row, cell) {
+    isEmptyLocation(row, col) {
         return super.isEmptyCell(new Cell(row, col));
+    }
+
+    get clone() {
+        let b = new Board(this.boardSize);
+        this.allRows.forEach((row, row_num) => {
+            row.forEach(candy, column_number => {
+                if (!!cell) return;
+                b.fillCell(new Cell(row_num, column_num), candy.clone);
+            })
+        });
+        return b;
     }
 
     get valid_colors() {
@@ -258,7 +402,15 @@ class Board extends Grid {
         return this.rows;
     }
 
-    getBoardSize() {
+    get eventTarget() {
+        return this.event_target;
+    }
+
+    set eventTarget(target) {
+        this.event_target = target;
+    }
+
+    getSize() {
         return this.boardSize;
     }
 
@@ -301,7 +453,7 @@ class Board extends Grid {
                 }
             });
 
-            CustomEvent.dispatchEvent(event);
+            this.eventTarget.dispatchEvent(event);
         }
     }
 
@@ -311,6 +463,7 @@ class Board extends Grid {
         const valid = !!this.getLocationOf(candy) && this.isEmptyAndValid(destination);
         if (valid) {
             this.updateAddCandy(candy, destination);
+            super.fillCell(origin, null);
             const event = new CustomEvent('move', {
                 detail: {
                     candy: candy,
@@ -321,7 +474,7 @@ class Board extends Grid {
                 }
             });
 
-            CustomEvent.dispatchEvent(event);
+            this.eventTarget.dispatchEvent(event);
         } else {
             console.error(!!this.getLocationOf(candy), this.isEmptyAndValid(destination));
             throw Error(`invalid move operation`);
@@ -340,7 +493,7 @@ class Board extends Grid {
                 }
             });
 
-            CustomEvent.dispatchEvent(event);
+            this.eventTarget.dispatchEvent(event);
         }
     }
 
@@ -358,7 +511,7 @@ class Board extends Grid {
                 }
             });
 
-            CustomEvent.dispatchEvent(event);
+            this.eventTarget.dispatchEvent(event);
         }
 
     }
@@ -381,19 +534,21 @@ class Board extends Grid {
         this.addRandomCandy(cell.row, cell.column);
     }
 
-    getCandyInDirection(fromCandy, direction) {
+    getNeighborPosition(position, direction) {
+        let delta = [0, 0];
         switch (direction) {
-            case 'up':
-                return this.getCandyAt(fromCandy.position.row - 1, fromCandy.position.column);
-            case 'down':
-                return this.getCandyAt(fromCandy.position.row + 1, fromCandy.position.column);
-            case 'left':
-                return this.getCandyAt(fromCandy.position.row, fromCandy.position.column - 1);
-            case 'right':
-                return this.getCandyAt(fromCandy.position.row, fromCandy.position.column + 1);
-            default:
-                throw Error(`Expected up, down, left, right; got ${direction}`);
+            case 'up': delta = [-1, 0]; break;
+            case 'down': delta = [1, 0]; break;
+            case 'left': delta = [0, -1]; break;
+            case 'right': delta = [0, 1]; break;
+
+            default: throw Error(`Expected up, down, left, right; got ${direction}`);
         }
+        return position.neighbor(...delta);
+    }
+
+    getCandyInDirection(fromCandy, direction) {
+        return this.getCandyAt(...this.getNeighborPosition(fromCandy.position, direction).toArray());
     }
 
     moveToCell(candy, cell) {
@@ -402,8 +557,12 @@ class Board extends Grid {
 
     flipCandies(candy1, candy2) {
         const [pos1initial, pos2initial] = [candy1.position, candy2.position];
+        const candy2_clone = candy2.clone;
+
+        this.remove(candy2);
         this.moveToCell(candy1, pos2initial);
-        this.moveToCell(candy2, pos1initial);
+        
+        this.updateAddCandy(candy2_clone, pos1initial);
     }
 
     get current_score() {
@@ -422,7 +581,7 @@ class Board extends Grid {
             }
         });
         this.current_score = 0;
-        CustomEvent.dispatchEvent(event);
+        this.eventTarget.dispatchEvent(event);
 
     }
 
@@ -438,7 +597,7 @@ class Board extends Grid {
             }
         });
         this.current_score = this.current_score + INC;
-        CustomEvent.dispatchEvent(event);
+        this.eventTarget.dispatchEvent(event);
 
     }
 
@@ -447,6 +606,342 @@ class Board extends Grid {
     }
 
     toString() {
+        console.table(this.allRows);
         return this.grid;
     }
+
+    toArray() {
+        return [...this.slots];
+    }
 }
+
+class Game {
+    constructor() {
+        this.board = new Board(15);
+        this.scoring = false;
+    }
+
+    makeMove(fromCandy, direction) {
+        const valid = this.isMoveValidType(fromCandy, direction);
+
+        if (valid) {
+            this.board.flipCandies(fromCandy, this.board.getCandyInDirection(fromCandy, direction));
+        }
+    }
+
+    set dimensions(width) {
+        this.board = new Board(width);
+    }
+
+    /*
+    *
+    *   Returns true if flipping fromCandy with the candy in the direction
+    *   specified (["up", "down", "left", "right"]) is valid
+    *   (according to the rules), else returns false.
+    *
+    */
+    isMoveValidType(fromCandy, direction) {
+        return this.numberCandiesCrushedByMove(fromCandy, direction) > 0;
+    }
+
+    /*
+    *   Returns a list of all candy crushes on the board. A crush is a list of three
+    *   candies in a single row or column that have the same color. Each crush is returned 
+    *   as a list of lists
+    */
+    getCandyCrushes() {
+        return ['allRows', 'allColumns'].map(group => {
+            return this.board[group].map(line => {
+                return LongestSequences(line, 3, Candy.sameColor);
+            });
+        });
+    }
+
+    /* 
+    *   Deletes all candies in listOfListsOfCrushes. If the game has already began, incremements 
+    *   the board score. Does not move the candies down at all. 
+    */
+    removeCrushes(listOfCrushes = []) {
+        Array.from
+            (
+            new Set(listOfCrushes.flat())
+            )
+            .forEach(candy => this.board.remove(candy));
+    }
+
+
+    /* 
+    *   Moves candies down as far as there are spaces. Issues calls to Board.moveTo which generates move 
+    *   events. If there are holes created by moving the candies down, populates the board with new random candies
+    */
+    moveCandiesDown() {
+        this.board.allColumns.forEach((column, column_number) => {
+            const emptyCellsBelow = (row_number) => {
+                return column
+                    .map((_, idx) => new Cell(idx, column_number))
+                    .slice(row_number)
+                    .filter(cell => this.board.isEmptyCell(cell), this);
+            };
+
+            const newLocation = (candy) => {
+                return new Cell(
+                    candy.position.row + emptyCellsBelow(candy.position.row).length,
+                    candy.position.column
+                );
+            };
+
+            column.slice(0).reverse().forEach(candy => {
+                if (!candy) return;
+
+                if (emptyCellsBelow(candy.position.row).length > 0) {
+                    this.board.moveToCell(candy, newLocation(candy));
+                }
+            });
+
+            emptyCellsBelow(0).reverse().forEach(empty_cell => {
+                this.board.addRandomCandyCell(empty_cell);
+            });
+        });
+
+    }
+
+    getAllValidMoves() {
+        const v_pattern_down = {
+            getPattern: (anchor) => {
+                return [
+                    anchor,
+                    anchor.neighbor(1, 1),
+                    anchor.neighbor(0, 2)
+                ];
+            },
+            validAnchor: (board, anchor) => {
+                return anchor.row < board.rows - 2 && anchor.column < board.columns - 3;
+            },
+            width: 3,
+            height: 2,
+            getMove: (anchor) => {
+                return {
+                    candy_position: anchor.neighbor(1, 1),
+                    direction: 'up'
+                };
+            }
+        };
+
+        const v_pattern_left = {
+            getPattern: (anchor) => {
+                return [
+                    anchor,
+                    anchor.neighbor(1, -1),
+                    anchor.neighbor(2, 0)
+                ];
+            },
+            validAnchor: (board, anchor) => {
+                return anchor.row < board.rows - 3 && anchor.column > 0;
+            },
+            width: 2,
+            height: 3,
+            getMove: (anchor) => {
+                return {
+                    candy_position: anchor.neighbor(1, -1),
+                    direction: 'right'
+                };
+            }
+        };
+
+        const v_pattern_right = {
+            getPattern: (anchor) => {
+                return [
+                    anchor,
+                    anchor.neighbor(1, 1),
+                    anchor.neighbor(2, 0)
+                ];
+            },
+            validAnchor: (board, anchor) => {
+                return anchor.row < board.rows - 3 && anchor.column < board.columns - 2;
+            },
+            width: 2,
+            height: 3,
+            getMove: (anchor) => {
+                return {
+                    candy_position: anchor.neighbor(1, 1),
+                    direction: 'left'
+                };
+            }
+        };
+
+        const v_pattern_up = {
+            getPattern: (anchor) => {
+                return [
+                    anchor,
+                    anchor.neighbor(-1, 1),
+                    anchor.neighbor(0, 2)
+                ];
+            },
+            validAnchor: (board, anchor) => {
+                return anchor.row > 0 && anchor.column < board.columns - 3;
+            },
+            width: 3,
+            height: 2,
+            getMove: (anchor) => {
+                return {
+                    candy_position: anchor.neighbor(-1, 1),
+                    direction: 'down'
+                };
+            }
+        };
+
+        const flat_pattern = {
+            getPattern: (anchor) => {
+                return [
+                    anchor,
+                    anchor.neighbor(0, 1),
+                    anchor.neighbor(0, 3)
+                ];
+            },
+            validAnchor: (board, anchor) => {
+                return anchor.column < board.columns - 4;
+            },
+            width: 4,
+            height: 1,
+            getMove: (anchor) => {
+                return {
+                    candy_position: anchor.neighbor(0, 3),
+                    direction: 'up'
+                };
+            }
+        };
+
+        const l_pattern = {
+            getPattern: (anchor) => {
+                return [
+                    anchor,
+                    anchor.neighbor(0, 1),
+                    anchor.neighbor(1, 2)
+                ];
+            },
+            validAnchor: (board, anchor) => {
+                return anchor.row < board.rows - 2 && anchor.column < board.columns - 4;
+            },
+            width: 4,
+            height: 2,
+            getMove: (anchor) => {
+                return {
+                    candy_position: anchor.neighbor(1, 2),
+                    direction: 'up'
+                };
+            }
+        };
+
+        const fill_candy = (move) => {
+            return {
+                candy: this.board.getCell(move.candy_position),
+                direction: move.direction
+            }
+        };
+
+
+
+        return [v_pattern_down, v_pattern_up, v_pattern_left, v_pattern_right, flat_pattern, l_pattern].map(blueprint => {
+            return this.board
+                .findAll()
+                .filter(cell => { return blueprint.validAnchor(this.board, cell); })
+                .map(blueprint.getPattern)
+                .map(pattern => { return pattern.map(cell => { return this.board.getCell(cell); }); })
+                .filter(pattern => Candy.sameColor(...pattern.flat()))
+                .map(pattern => pattern[0].position)
+                .map(blueprint.getMove)
+                .map(fill_candy);
+        });
+
+    }
+
+    /* 
+    *   If there is a valid move on the board, returns an object with two properties: candy: a candy that can be moved 
+    *   and direction: the direction to be moved. If there are no valid moves, returns null. The move is selected 
+    *   randomly from available moves. 
+    */
+    getRandomValidMove() {
+        const pickRandom = (arr) => { return arr[Math.floor(Math.random() * arr.length)]; };
+        return pickRandom(this.getAllValidMoves().flat());
+    }
+
+
+    /* 
+    *   Populates the board with random candies
+    */
+    populateBoard() {
+        this.board.findAll().forEach(cell => this.board.addRandomCandyCell(cell));
+    }
+
+    /*
+    *   Returns a list of candies that would be crushed if fromCandy were to be moved in the direction
+    *   specified by direction. If no candies are to be crushed, returns an empty list.  
+    */
+    getCandiesToCrushGivenMove(fromCandy, direction) {
+        const destination = this.board.getNeighborPosition(fromCandy.position, direction);
+        const valid = this.board.isValidCell(destination);
+
+        const flip = (arr1, arr2, position) => {
+            return [
+                arr1.slice(0, position) + [arr2[position]] + arr1.slice(position + 1),
+                arr2.slice(0, position) + [arr1[position]] + arr2.slice(position + 1)
+            ];
+        }
+
+        if (valid) {
+            if (destination.row === fromCandy.position.row) {
+
+                return Array.from(
+                    new Set(
+                        [
+                            ...flip(this.board.getColumn(destination.column), this.board.getColumn(fromCandy.position.column), destination.row),
+                            this.board.getRow(destination.row)
+                        ]
+                            .map(line => { return LongestSequences(line, 3, Candy.sameColor); })
+                            .flat(3)
+                    )
+                );
+
+            } else {
+
+                return Array.from(
+                    new Set(
+                        [
+                            ...flip(this.board.getRow(destination.row), this.board.getRow(fromCandy.position.row), destination.column),
+                            this.board.getColumn(destination.column)
+                        ]
+                            .map(line => { return LongestSequences(line, 3, Candy.sameColor); })
+                            .flat(3)
+                    )
+                );
+
+            }
+        }
+
+        return [];
+    }
+
+    /*
+    *   Returns number of sets of candies that would be crushed if the candy was moved in the specified
+    *   direction
+    */
+    numberCandiesCrushedByMove(fromCandy, direction) {
+        return this.getCandiesToCrushGivenMove(fromCandy, direction).length;
+    }
+
+
+    /*
+    *   prepares new game with no sets of crushable candies. Sets the score to zero so that player doesn't 
+    *   get crushes by luck 
+    */
+    prepareNewGame() {
+        this.populateBoard();
+        let crushes = this.getCandyCrushes().flat(2);
+        while (crushes.length > 0) {
+            this.removeCrushes(crushes);
+            this.moveCandiesDown();
+            crushes = this.getCandyCrushes().flat(2);
+        }
+    }
+}
+
